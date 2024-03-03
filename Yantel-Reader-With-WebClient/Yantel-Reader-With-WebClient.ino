@@ -14,13 +14,16 @@ byte bytePower[] = { 0xBB, 0x00, 0x27, 0x00, 0x03, 0x22, 0x27, 0x10, 0x83, 0x7E 
 
 unsigned long awaking; //awakes the reader.
 unsigned long sending; //sends data to the server
-unsigned long buttonTimer; //sends data to the server
+unsigned long buttonTimer; //helps avoid reading interference
+unsigned long reloadingEN; //awakes the EN pin
+unsigned long reloadConnect; //reload the microcontroller system for re-connect to network
 
 const char* ssid = "Patriarche Damir"; //own network's SSID
 const char* password = "snrk6276"; //and the password
 
 const char* host = "192.168.53.208"; //server's ip-address
 const int httpPort = 8000; //check in the server's settings
+const uint8_t ENpin = 5;
 
 struct Button {
   const uint8_t pin;
@@ -33,6 +36,10 @@ WiFiClient client;
 
 void setup() {
   pinMode(closingButton.pin, INPUT_PULLUP);
+  pinMode(ENpin, OUTPUT);
+  digitalWrite(ENpin, HIGH);
+  pinMode(23, OUTPUT);
+  digitalWrite(23, HIGH);
 
   Serial.begin(115200); //COM-port needed only for debugging
   Serial2.begin(115200); //COM-port needed for communications with reader
@@ -46,6 +53,15 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) { //checking connection
     Serial.print(".");
     delay(500);
+    if (millis() - reloadConnect > 5000) { //re-connect mc
+      digitalWrite(23, LOW);
+      delayMicroseconds(2);
+      digitalWrite(23, HIGH);
+      
+      Serial.println("re-conect");
+
+      reloadConnect = millis();
+    }
   }
   Serial.println();
   
@@ -57,11 +73,10 @@ void setup() {
   
   sendQuery(bytePower, sizeof(bytePower)); //reader awaking
 
-  attachInterrupt(closingButton.pin, calculateClosing, HIGH && !closingButton.pressed);
+  attachInterrupt(closingButton.pin, calculateClosing, HIGH);
 }
 
 void loop() {
-  // delay(500); //needed to avoid microcontroller overload 
 
   String request = "GET /monitoring/sending/?RFID=";
 
@@ -94,8 +109,16 @@ void loop() {
     }
   }
 
+  if (millis() - reloadingEN > 15000) {
+    digitalWrite(ENpin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(ENpin, HIGH);
+
+    reloadingEN = millis();
+  }
+
   if (millis() - awaking > 15000) {
-    awaking = millis(); 
+    awaking = millis();   
     sendQuery(bytePower, sizeof(bytePower));
   }
 
@@ -105,7 +128,7 @@ void loop() {
     sendHttpRequest(request);
   }
 
-  if (closingButton.pressed && digitalRead(closingButton.pin) && millis() - buttonTimer > 100) {
+  if (closingButton.pressed && !digitalRead(closingButton.pin) && millis() - buttonTimer > 100) {
     closingButton.pressed = false;
     buttonTimer = millis();
     Serial.printf("Button was pressed %d times\n", closingButton.closingCount);
@@ -113,9 +136,11 @@ void loop() {
 }
 
 void calculateClosing() {
-  closingButton.closingCount++;
-  closingButton.pressed = true;
-  buttonTimer = millis();
+  if (!closingButton.pressed && millis() - buttonTimer > 100) {
+    closingButton.closingCount++;
+    closingButton.pressed = true;
+    buttonTimer = millis();
+  }
 }
 
 void sendHttpRequest(String request) {
@@ -126,12 +151,11 @@ void sendHttpRequest(String request) {
   }
 
   int id_stanok = random(1, 3); //random data needed for request
-  int count = random(100, 10000); //random data needed for request; count of closure
 
 
   request += "&ID_stanok=" + String(id_stanok);
-  request += "&Count=" + String(count);
-  request += "&State=1&Purpose=wqewqe&Country=qweqwe HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
+  request += "&Count=" + String(closingButton.closingCount);
+  request += "&State=1&Purpose=no_indicated&Country=no_indicated HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
 
   Serial.println("sending request...");
 
@@ -140,7 +164,7 @@ void sendHttpRequest(String request) {
   }
 
   closingButton.closingCount = 0;
-
+ 
   Serial.println("Closing connection.");
 
   unsigned long timeout = millis();
