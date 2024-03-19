@@ -15,7 +15,7 @@ byte bytePower[] = { 0xBB, 0x00, 0x27, 0x00, 0x03, 0x22, 0x27, 0x10, 0x83, 0x7E 
 unsigned long awaking; //awakes the reader.
 unsigned long sending; //sends data to the server
 unsigned long buttonTimer; //helps avoid reading interference
-unsigned long reloadingEN; //awakes the EN pin
+unsigned long reading; //timer for choppy reading
 unsigned long reloadConnect; //reload the microcontroller system for re-connect to network
 
 const char* ssid = "Patriarche Damir"; //own network's SSID
@@ -31,7 +31,8 @@ struct Button {
   bool pressed;
 };
 
-Button closingButton = {18, 0, false};
+Button closingButton = {18, 1, false};
+String request = "";
 WiFiClient client;
 
 void setup() {
@@ -52,14 +53,14 @@ void setup() {
 
   while (WiFi.status() != WL_CONNECTED) { //checking connection
     Serial.print(".");
-    delay(500);
-    if (millis() - reloadConnect > 5000) { //re-connect mc
-      digitalWrite(23, LOW);
-      delayMicroseconds(2);
-      digitalWrite(23, HIGH);
-      
-      Serial.println("re-conect");
+    delay(1000); 
 
+    if (millis() - reloadConnect > 10000) { 
+      WiFi.disconnect();
+      Serial.println("Connecting...");
+      WiFi.begin(ssid, password, 0, NULL, false);
+      WiFi.reconnect();
+      
       reloadConnect = millis();
     }
   }
@@ -77,55 +78,56 @@ void setup() {
 }
 
 void loop() {
+  while (WiFi.status() != WL_CONNECTED) { //checking connection
+    Serial.print(".");
+    delay(1000); 
 
-  String request = "GET /monitoring/sending/?RFID=";
-
-  if (Serial2.available()) {
-    byte bts[256]; //256 - too  few (mem overflow), 1024 - too slow reading.
-    byte i = 0;
-    while (Serial2.available()) {
-      bts[i] = Serial2.read();
-      delay(1); //the argument was equal to 1; increase may help for avoid "mem overflow" exception.
-      i++;
-      if (i == 256) {
-        while (Serial2.available()) {
-          Serial2.read();
-          delay(10);
-          Serial.println("Overload");
-        } 
-      }
-    }
-    // delay(50);
-    if (i == 24) { //вывод метки, где 8 - "помеха", а 6 последних бита - биты четности скорее всего. 
-                   //коэффициент в условии, например, 24 влияет на скорость вывода метки, влияение на дальность сомнительно.
-      for (byte a = 9, index = 0; a < 19; a++, index++) {
-        request += bts[a];
-
-        Serial.print(bts[a], HEX); //convertation can be deleted.
-        Serial.print(" | ");
-      }
-      delay(5);
-      Serial.println();
+    if (millis() - reloadConnect > 10000) { 
+      WiFi.disconnect();
+      Serial.println("Connecting...");
+      WiFi.begin(ssid, password, 0, NULL, false);
+      WiFi.reconnect();
+      
+      reloadConnect = millis();
     }
   }
 
-  if (millis() - reloadingEN > 15000) {
-    digitalWrite(ENpin, LOW);
-    delayMicroseconds(2);
-    digitalWrite(ENpin, HIGH);
+  request = "GET /monitoring/sending/?RFID=";
 
-    reloadingEN = millis();
-  }
+  // if (millis() - reading > 5000) {
+    if (Serial2.available()) {
+      byte bts[256]; //256 - too  few (mem overflow), 1024 - too slow reading.
+      byte i = 0;
+      while (Serial2.available()) {
+        bts[i] = Serial2.read();
+        delay(1); //the argument was equal to 1; increase may help for avoid "mem overflow" exception.
+        i++;
+        if (i == 256) {
+          while (Serial2.available()) {
+            Serial2.read();
+            delay(10);
+            Serial.println("Overload");
+          } 
+        }
+      }
+      // delay(50);
+      if (i == 24) { //вывод метки, где 8 - "помеха", а 6 последних бита - биты четности скорее всего. 
+                    //коэффициент в условии, например, 24 влияет на скорость вывода метки, влияение на дальность сомнительно.
+        for (byte a = 9, index = 0; a < 19; a++, index++) {
+          request += String(bts[a], HEX);
 
-  if (millis() - awaking > 15000) {
+        }
+
+        if (millis() - sending > 60000) {
+          sending = millis(); 
+          sendHttpRequest(request);
+        }
+      }
+    }       
+
+  if (millis() - awaking > 30000) {
     awaking = millis();   
     sendQuery(bytePower, sizeof(bytePower));
-  }
-
-  if (millis() - sending > 30000) {
-    Serial.println("sending");
-    sending = millis(); 
-    sendHttpRequest(request);
   }
 
   if (closingButton.pressed && !digitalRead(closingButton.pin) && millis() - buttonTimer > 100) {
@@ -155,7 +157,7 @@ void sendHttpRequest(String request) {
 
   request += "&ID_stanok=" + String(id_stanok);
   request += "&Count=" + String(closingButton.closingCount);
-  request += "&State=1&Purpose=no_indicated&Country=no_indicated HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
+  request += "&State=1&Purpose=wqewqe&Country=qweqwe HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
 
   Serial.println("sending request...");
 
@@ -163,7 +165,7 @@ void sendHttpRequest(String request) {
     client.print(request);  //sending request to the server
   }
 
-  closingButton.closingCount = 0;
+  closingButton.closingCount = 1;
  
   Serial.println("Closing connection.");
 
