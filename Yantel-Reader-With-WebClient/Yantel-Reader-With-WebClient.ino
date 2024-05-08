@@ -17,6 +17,7 @@ unsigned long sending; //sends data to the server
 unsigned long buttonTimer; //helps avoid reading interference
 unsigned long reading; //timer for choppy reading
 unsigned long reloadConnect; //reload the microcontroller system for re-connect to network
+unsigned long worktimeTimer; //needs for mark's work time calculation 
 
 const char* ssid = "Patriarche Damir"; //own network's SSID
 const char* password = "snrk6276"; //and the password
@@ -32,7 +33,8 @@ struct Button {
 };
 
 Button closingButton = {18, 1, false};
-String request = "";
+String request = "", currentMark = "", leftMark = "";
+unsigned long worktime = 0;
 WiFiClient client;
 
 void setup() {
@@ -92,7 +94,16 @@ void loop() {
     }
   }
 
+  if (millis() - worktimeTimer > 1000) {
+    if (currentMark == leftMark) {
+      worktime++;
+      worktimeTimer = millis();
+    }
+    else worktime = 0;
+  }
+
   request = "GET /monitoring/sending/?RFID=";
+  leftMark = currentMark;
 
   // if (millis() - reading > 5000) {
     if (Serial2.available()) {
@@ -115,7 +126,7 @@ void loop() {
                     //коэффициент в условии, например, 24 влияет на скорость вывода метки, влияение на дальность сомнительно.
         for (byte a = 9, index = 0; a < 19; a++, index++) {
           request += String(bts[a], HEX);
-
+          currentMark += String(bts[a], HEX);
         }
 
         if (millis() - sending > 60000) {
@@ -125,20 +136,20 @@ void loop() {
       }
     }       
 
-  if (millis() - awaking > 30000) {
+  if (millis() - awaking > 70000) {
     awaking = millis();   
     sendQuery(bytePower, sizeof(bytePower));
   }
 
-  if (closingButton.pressed && !digitalRead(closingButton.pin) && millis() - buttonTimer > 100) {
+  if (closingButton.pressed && !digitalRead(closingButton.pin) && millis() - buttonTimer > 50) {
     closingButton.pressed = false;
     buttonTimer = millis();
-    Serial.printf("Button was pressed %d times\n", closingButton.closingCount);
+    // Serial.printf("Button was pressed %d times\n", closingButton.closingCount);
   }
 }
 
 void calculateClosing() {
-  if (!closingButton.pressed && millis() - buttonTimer > 100) {
+  if (!closingButton.pressed && millis() - buttonTimer > 50) {
     closingButton.closingCount++;
     closingButton.pressed = true;
     buttonTimer = millis();
@@ -146,18 +157,20 @@ void calculateClosing() {
 }
 
 void sendHttpRequest(String request) {
+  Serial.printf("This is mark's working time: %d", worktime);
 
   if (!client.connect(host, httpPort)) { //try to move to the setup
     Serial.println("Connection to server failed.");
     return;
   }
 
-  int id_stanok = random(1, 3); //random data needed for request
+  int id_stanok = 1; //random data needed for request
 
 
   request += "&ID_stanok=" + String(id_stanok);
   request += "&Count=" + String(closingButton.closingCount);
-  request += "&State=1&Purpose=wqewqe&Country=qweqwe HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
+  request += "&WorkTime=" + String(worktime);
+  request += "&State=1&Purpose=None&Country=None HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
 
   Serial.println("sending request...");
 
