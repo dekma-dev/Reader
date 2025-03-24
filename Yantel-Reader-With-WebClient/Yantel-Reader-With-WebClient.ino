@@ -19,12 +19,11 @@ unsigned long reading; //timer for choppy reading
 unsigned long reloadConnect; //reload the microcontroller system for re-connect to network
 unsigned long worktimeTimer; //needs for mark's work time calculation 
 
-const char* ssid = "Patriarche Damir"; //own network's SSID
-const char* password = "snrk6276"; //and the password
+const char* ssid = "Patriarche"; //own network's SSID
+const char* password = "snrk727776"; //and the password
 
-const char* host = "192.168.53.208"; //server's ip-address
-const int httpPort = 8000; //check in the server's settings
-const uint8_t ENpin = 5;
+const char* host = "192.168.198.208"; //server's ip-address
+const int httpPort = 80; //check in the server's settings
 
 struct Button {
   const uint8_t pin;
@@ -39,8 +38,6 @@ WiFiClient client;
 
 void setup() {
   pinMode(closingButton.pin, INPUT_PULLUP);
-  pinMode(ENpin, OUTPUT);
-  digitalWrite(ENpin, HIGH);
   pinMode(23, OUTPUT);
   digitalWrite(23, HIGH);
 
@@ -144,7 +141,6 @@ void loop() {
   if (closingButton.pressed && !digitalRead(closingButton.pin) && millis() - buttonTimer > 50) {
     closingButton.pressed = false;
     buttonTimer = millis();
-    // Serial.printf("Button was pressed %d times\n", closingButton.closingCount);
   }
 }
 
@@ -164,15 +160,17 @@ void sendHttpRequest(String request) {
     return;
   }
 
-  int id_stanok = 1; //random data needed for request
+  int id_stanok = 3; //random data needed for request
 
 
   request += "&ID_stanok=" + String(id_stanok);
   request += "&Count=" + String(closingButton.closingCount);
   request += "&WorkTime=" + String(worktime);
-  request += "&State=1&Purpose=None&Country=None HTTP/1.1\r\nHost: 192.168.53.208\r\nConnection: close\r\n\r\n";
+  request += "&State=Установлена&Purpose=None&Country=None HTTP/1.1\r\nHost: 192.168.198.208\r\nConnection: close\r\n\r\n"; //State должно быть строкой, как в бд
 
   Serial.println("sending request...");
+  Serial.println(request);
+
 
   if (client.connected()) { 
     client.print(request);  //sending request to the server
