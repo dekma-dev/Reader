@@ -1,4 +1,5 @@
 #include <WiFi.h> // necessary lib
+#include <HTTPClient.h>
 
 /*
   Documentation
@@ -7,6 +8,8 @@
   2. Reader have to have full-time working. Means that reading should not have delays.
   3. Client should not spam the server with requests, delays are needed here.
   4. For some reason asynchronous method yield() doesn't work in ESP32.
+  5. Needs 5V voltage power supply.
+  6. Available to add http-requests within authorization, it's can be useful if we want to filter access through that way penetration.
 
 */
 
@@ -21,6 +24,7 @@ unsigned long worktimeTimer; //needs for mark's work time calculation
 
 const char* ssid = "Patriarche"; //own network's SSID
 const char* password = "snrk727776"; //and the password
+const char* serverName = "http://192.168.198.208:80/monitoring/sending";
 
 const char* host = "192.168.198.208"; //server's ip-address
 const int httpPort = 80; //check in the server's settings
@@ -99,7 +103,8 @@ void loop() {
     else worktime = 0;
   }
 
-  request = "GET /monitoring/sending/?RFID=";
+  // request = "GET /monitoring/sending/?RFID=";
+  request = "?RFID=";
   leftMark = currentMark;
 
   // if (millis() - reading > 5000) {
@@ -128,7 +133,8 @@ void loop() {
 
         if (millis() - sending > 60000) {
           sending = millis(); 
-          sendHttpRequest(request);
+          // sendGetHttpRequest(request);
+          sendGETtHttpRequest(request);
         }
       }
     }       
@@ -152,48 +158,82 @@ void calculateClosing() {
   }
 }
 
-void sendHttpRequest(String request) {
-  Serial.printf("This is mark's working time: %d", worktime);
+void sendGETtHttpRequest(String request) {
+   if(WiFi.status()== WL_CONNECTED){
+      HTTPClient http;
 
-  if (!client.connect(host, httpPort)) { //try to move to the setup
-    Serial.println("Connection to server failed.");
-    return;
-  }
+    int id_stanok = random(1, 10); //random data needed for request
 
-  int id_stanok = 3; //random data needed for request
+    request += "&ID_stanok=" + String(id_stanok);
+    request += "&Count=" + String(closingButton.closingCount);
+    request += "&WorkTime=" + String(worktime);
+    request += "&State=Установлена&Purpose=None&Country=None HTTP/1.1\r\nHost: 192.168.198.208\r\nConnection: close\r\n\r\n"; //State должно быть строкой, как в бд
 
+    Serial.println("sending request...");
+    Serial.println(request);
 
-  request += "&ID_stanok=" + String(id_stanok);
-  request += "&Count=" + String(closingButton.closingCount);
-  request += "&WorkTime=" + String(worktime);
-  request += "&State=Установлена&Purpose=None&Country=None HTTP/1.1\r\nHost: 192.168.198.208\r\nConnection: close\r\n\r\n"; //State должно быть строкой, как в бд
-
-  Serial.println("sending request...");
-  Serial.println(request);
-
-
-  if (client.connected()) { 
-    client.print(request);  //sending request to the server
-  }
-
-  closingButton.closingCount = 1;
- 
-  Serial.println("Closing connection.");
-
-  unsigned long timeout = millis();
-  while (client.available() == 0) {
-    if (millis() - timeout > 10000) {
-      Serial.println(">>> Client Timeout !");
-      client.stop();
-      return;
+    String serverPath = serverName + request;
+    
+    http.begin(serverPath.c_str());
+    
+    // If you need Node-RED/server authentication, insert user and password below
+    //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
+    
+    int httpResponseCode = http.GET();
+      
+    if (httpResponseCode>0) {
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+      String payload = http.getString();
+      Serial.println(payload);
+    } else {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
     }
-  }
+    http.end();
+  } else  Serial.println("WiFi Disconnected");
 }
+
+// void sendGetHttpRequest(String request) {
+//   Serial.printf("This is mark's working time: %d", worktime);
+
+//   if (!client.connect(host, httpPort)) { //try to move to the setup
+//     Serial.println("Connection to server failed.");
+//     return;
+//   }
+
+//   int id_stanok = random(1, 10); //random data needed for request
+
+//   request += "&ID_stanok=" + String(id_stanok);
+//   request += "&Count=" + String(closingButton.closingCount);
+//   request += "&WorkTime=" + String(worktime);
+//   request += "&State=Установлена&Purpose=None&Country=None HTTP/1.1\r\nHost: 192.168.198.208\r\nConnection: close\r\n\r\n"; //State должно быть строкой, как в бд
+
+//   Serial.println("sending request...");
+//   Serial.println(request);
+
+
+//   if (client.connected()) { 
+//     client.print(request);  //sending request to the server
+//   }
+
+//   closingButton.closingCount = 1;
+ 
+//   Serial.println("Closing connection.");
+
+//   unsigned long timeout = millis();
+//   while (client.available() == 0) {
+//     if (millis() - timeout > 10000) {
+//       Serial.println(">>> Client Timeout !");
+//       client.stop();
+//       return;
+//     }
+//   }
+// }
 
 void sendQuery(byte bytes[], byte len) { 
   Serial.println(len);
-  for (byte i = 0; i < len; i++)
-    Serial2.write(bytes[i]);
+  for (byte i = 0; i < len; i++) Serial2.write(bytes[i]);
   for (byte i = 0; i < len; i++) { //just for debugging
     Serial.print(bytes[i], HEX);
     Serial.print('\t');
