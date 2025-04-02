@@ -131,14 +131,14 @@ void loop() {
           currentMark += String(bts[a], HEX);
         }
 
-        if (millis() - sending > 60000) {
+        if (millis() - sending > 15000) {
           sending = millis(); 
           // sendGetHttpRequest(request);
           sendGETtHttpRequest(request);
         }
       }
     }       
-
+  //probably should be the same that up there
   if (millis() - awaking > 70000) {
     awaking = millis();   
     sendQuery(bytePower, sizeof(bytePower));
@@ -181,16 +181,19 @@ void sendGETtHttpRequest(String request) {
     
     int httpResponseCode = http.GET();
       
-    if (httpResponseCode>0) {
-      Serial.print("HTTP Response code: ");
-      Serial.println(httpResponseCode);
-      String payload = http.getString();
-      Serial.println(payload);
-    } else {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
-    }
+    // if (httpResponseCode > 0) {
+    //   Serial.print("HTTP Response code: ");
+    //   Serial.println(httpResponseCode);
+    //   String payload = http.getString();
+    //   Serial.println(payload);
+    // } else {
+    //   Serial.print("Error code: ");
+    //   Serial.println(httpResponseCode);
+    // }
     http.end();
+
+    closingButton.closingCount = 1;
+
   } else  Serial.println("WiFi Disconnected");
 }
 
