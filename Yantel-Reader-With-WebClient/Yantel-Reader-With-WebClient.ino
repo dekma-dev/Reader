@@ -131,7 +131,7 @@ void loop() {
           currentMark += String(bts[a], HEX);
         }
 
-        if (millis() - sending > 15000) {
+        if (millis() - sending > 60000) {
           sending = millis(); 
           // sendGetHttpRequest(request);
           sendGETtHttpRequest(request);
@@ -181,6 +181,8 @@ void sendGETtHttpRequest(String request) {
     
     int httpResponseCode = http.GET();
       
+    //Дебаг отправки запроса
+
     // if (httpResponseCode > 0) {
     //   Serial.print("HTTP Response code: ");
     //   Serial.println(httpResponseCode);
@@ -196,6 +198,8 @@ void sendGETtHttpRequest(String request) {
 
   } else  Serial.println("WiFi Disconnected");
 }
+
+//Старый GET запрос, сейчас не актуален - оставлен на всякий случай
 
 // void sendGetHttpRequest(String request) {
 //   Serial.printf("This is mark's working time: %d", worktime);
